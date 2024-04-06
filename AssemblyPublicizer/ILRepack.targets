@@ -3,11 +3,20 @@
     <Target Name="ILRepacker" AfterTargets="Build">
         <ItemGroup>
             <InputAssemblies Include="$(TargetPath)" />
-            <InputAssemblies Include="$(OutputPath)\Mono.Cecil.dll" />
-            <InputAssemblies Include="$(OutputPath)\Mono.Cecil.Mdb.dll" />
-            <InputAssemblies Include="$(OutputPath)\Mono.Cecil.Pdb.dll" />
-            <InputAssemblies Include="$(OutputPath)\Mono.Cecil.Rocks.dll" />
-            <InputAssemblies Include="$(OutputPath)\Mono.Options.dll" />
+            <InputAssemblies Include="$(OutputPath)Mono.Cecil.dll" />
+            <InputAssemblies Include="$(OutputPath)Mono.Cecil.Mdb.dll" />
+            <InputAssemblies Include="$(OutputPath)Mono.Cecil.Pdb.dll" />
+            <InputAssemblies Include="$(OutputPath)Mono.Cecil.Rocks.dll" />
+            <InputAssemblies Include="$(OutputPath)Mono.Options.dll" />
+            <InputAssemblies Include="$(OutputPath)Microsoft.Bcl.AsyncInterfaces.dll" />
+            <InputAssemblies Include="$(OutputPath)System.Buffers.dll" />
+            <InputAssemblies Include="$(OutputPath)System.Memory.dll" />
+            <InputAssemblies Include="$(OutputPath)System.Numerics.Vectors.dll" />
+            <InputAssemblies Include="$(OutputPath)System.Runtime.CompilerServices.Unsafe.dll" />
+            <InputAssemblies Include="$(OutputPath)System.Text.Encodings.Web.dll" />
+            <InputAssemblies Include="$(OutputPath)System.Text.Json.dll" />
+            <InputAssemblies Include="$(OutputPath)System.Threading.Tasks.Extensions.dll" />
+            <InputAssemblies Include="$(OutputPath)System.ValueTuple.dll" />
         </ItemGroup>
         <ILRepack Parallel="true" DebugInfo="true" Internalize="true" InputAssemblies="@(InputAssemblies)" OutputFile="$(TargetPath)" TargetKind="SameAsPrimaryAssembly" LibraryPath="$(OutputPath)" />
     </Target>

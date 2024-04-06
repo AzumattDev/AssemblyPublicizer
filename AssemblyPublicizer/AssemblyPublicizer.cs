@@ -2,6 +2,10 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.IO.Compression;
+using System.Net.Http;
+using System.Threading.Tasks;
+using System.Text.Json;
 using Mono.Cecil;
 using Mono.Options;
 
@@ -21,47 +25,46 @@ namespace CabbageCrow.AssemblyPublicizer
     /// </summary>
     class AssemblyPublicizer
     {
-        static bool automaticExit, help;
+        private const string BaseUrl = "https://thunderstore.io";
+        private const string ApiPath = "/c/valheim/api/v1/package";
+        private const string BepInExPackageName = "denikson/BepInExPack_Valheim/";
+        private const string BepInExPackageNameWVersion = "denikson-BepInExPack_Valheim";
+        private static bool _automaticExit, _help;
 
-        static void Main(string[] args)
+        static async Task Main(string[] args)
         {
-            var suffix = "_publicized";
-            var defaultOutputDir = "publicized_assemblies";
+            string suffix = "_publicized";
+            string defaultOutputDir = "publicized_assemblies";
 
-            var inputs = new List<string>();
+            List<string> inputs = new List<string>();
             string outputDir = "";
 
-            var options = new OptionSet
+            OptionSet options = new OptionSet
             {
                 { "i|input=", "Paths (relative or absolute) to the input assemblies, separated by comma", i => inputs = i.Split(',').ToList() },
                 { "o|output=", "[Optional] Output directory for the modified assemblies", o => outputDir = o },
-                { "e|exit", "Application should automatically exit", e => automaticExit = e != null },
-                { "h|help", "Show this message", h => help = h != null }
+                { "e|exit", "Application should automatically exit", e => _automaticExit = e != null },
+                { "h|help", "Show this message", h => _help = h != null }
             };
 
             try
             {
-                var extra = options.Parse(args);
-                if (help)
+                List<string> extra = options.Parse(args);
+                if (_help)
                     ShowHelp(options);
 
-                // Fallback to positional arguments if not using flags
                 if (!inputs.Any() && extra.Count >= 1)
                 {
                     inputs = extra.Take(extra.Count - 1).ToList();
                     outputDir = extra.LastOrDefault();
                 }
 
-                // If no inputs are specified, load all assemblies in the current directory
                 if (!inputs.Any())
                 {
-                    var currentDirectory = AppDomain.CurrentDomain.BaseDirectory;
-                    inputs = Directory.GetFiles(currentDirectory, "*.dll").ToList(); // assuming .dll files, change extension if necessary
+                    string currentDirectory = AppDomain.CurrentDomain.BaseDirectory;
+                    inputs = Directory.GetFiles(currentDirectory, "*.dll").ToList();
                 }
-                /*if (!inputs.Any())
-                    throw new OptionException("No input files specified.", "input");*/
 
-                // If no output directory specified, use default
                 if (string.IsNullOrEmpty(outputDir))
                 {
                     outputDir = defaultOutputDir;
@@ -77,9 +80,19 @@ namespace CabbageCrow.AssemblyPublicizer
             if (!Directory.Exists(outputDir))
                 Directory.CreateDirectory(outputDir);
 
-            foreach (var inputFile in inputs)
+            foreach (string inputFile in inputs)
             {
                 ProcessAssembly(inputFile, outputDir, suffix);
+            }
+
+            // After processing assemblies, download and install BepInEx
+            try
+            {
+                await DownloadAndInstallBepInEx();
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
             }
 
             Exit(0);
@@ -106,14 +119,14 @@ namespace CabbageCrow.AssemblyPublicizer
                 return;
             }
 
-            var allTypes = GetAllTypes(assembly.MainModule);
-            var allMethods = allTypes.SelectMany(t => t.Methods);
-            var allFields = allTypes.SelectMany(t => t.Fields);
+            IEnumerable<TypeDefinition> allTypes = GetAllTypes(assembly.MainModule);
+            IEnumerable<MethodDefinition> allMethods = allTypes.SelectMany(t => t.Methods);
+            IEnumerable<FieldDefinition> allFields = allTypes.SelectMany(t => t.Fields);
 
             MakePublic(allTypes, allMethods, allFields);
 
-            var outputName = $"{Path.GetFileNameWithoutExtension(inputFile)}{suffix}{Path.GetExtension(inputFile)}";
-            var outputFile = Path.Combine(outputDir, outputName);
+            string outputName = $"{Path.GetFileNameWithoutExtension(inputFile)}{suffix}{Path.GetExtension(inputFile)}";
+            string outputFile = Path.Combine(outputDir, outputName);
             try
             {
                 assembly.Write(outputFile);
@@ -129,41 +142,21 @@ namespace CabbageCrow.AssemblyPublicizer
         {
             Console.WriteLine($"Making types, methods, and fields public...");
 
-            int count = types.Count(t => !t.IsPublic && !t.IsNestedPublic);
-            foreach (var type in types)
+            foreach (TypeDefinition type in types)
             {
                 type.IsPublic = true;
                 type.IsNestedPublic = true;
             }
 
-            Console.WriteLine($"Changed {count} types to public.");
-
-            count = methods.Count(m => !m.IsPublic);
-            foreach (var method in methods)
+            foreach (MethodDefinition method in methods)
             {
                 method.IsPublic = true;
             }
 
-            Console.WriteLine($"Changed {count} methods to public.");
-
-            count = fields.Count(f => !f.IsPublic);
-            foreach (var field in fields)
+            foreach (FieldDefinition field in fields)
             {
                 field.IsPublic = true;
             }
-
-            Console.WriteLine($"Changed {count} fields to public.");
-        }
-
-        public static void Exit(int exitCode = 0)
-        {
-            if (!automaticExit)
-            {
-                Console.WriteLine("Press any key to exit...");
-                Console.ReadKey();
-            }
-
-            Environment.Exit(exitCode);
         }
 
         private static void ShowHelp(OptionSet p)
@@ -175,24 +168,210 @@ namespace CabbageCrow.AssemblyPublicizer
 
         public static IEnumerable<TypeDefinition> GetAllTypes(ModuleDefinition moduleDefinition)
         {
-            return _GetAllNestedTypes(moduleDefinition.Types); //.Reverse();
+            return _GetAllNestedTypes(moduleDefinition.Types);
         }
 
-        /// <summary>
-        /// Recursive method to get all nested types. Use <see cref="GetAllTypes(ModuleDefinition)"/>
-        /// </summary>
-        /// <param name="typeDefinitions"></param>
-        /// <returns></returns>
         private static IEnumerable<TypeDefinition> _GetAllNestedTypes(IEnumerable<TypeDefinition> typeDefinitions)
         {
-            //return typeDefinitions.SelectMany(t => t.NestedTypes);
-
-            if (typeDefinitions?.Count() == 0)
+            if (typeDefinitions?.Any() != true)
                 return new List<TypeDefinition>();
 
-            var result = typeDefinitions.Concat(_GetAllNestedTypes(typeDefinitions.SelectMany(t => t.NestedTypes)));
+            IEnumerable<TypeDefinition> result = typeDefinitions.Concat(_GetAllNestedTypes(typeDefinitions.SelectMany(t => t.NestedTypes)));
 
             return result;
+        }
+
+        private static void Exit(int exitCode = 0)
+        {
+            if (!_automaticExit)
+            {
+                Console.WriteLine("Press any key to exit...");
+                Console.ReadKey();
+            }
+
+            Environment.Exit(exitCode);
+        }
+
+        private static async Task DownloadAndInstallBepInEx()
+        {
+            var httpClient = new HttpClient();
+            string latestVersion = await GetLatestVersionAsync(httpClient);
+            if (latestVersion == null)
+            {
+                Console.WriteLine("Failed to get the latest version of BepInEx.");
+                return;
+            }
+
+            string downloadUrl = $"{BaseUrl}/package/download/{BepInExPackageName}{latestVersion}/";
+            string zipFilePath = await DownloadFileAsync(httpClient, downloadUrl);
+            if (zipFilePath == null)
+            {
+                Console.WriteLine("Failed to download the BepInEx package.");
+                return;
+            }
+
+            string gameFolderPath = GetGameFolderPath();
+            ExtractAndInstall(zipFilePath, gameFolderPath);
+            Console.WriteLine("BepInEx has been successfully installed.");
+        }
+
+        private static async Task<string> GetLatestVersionAsync(HttpClient httpClient)
+        {
+            try
+            {
+                var requestUrl = $"{BaseUrl}{ApiPath}/";
+                var response = await httpClient.GetStringAsync(requestUrl);
+                var packages = JsonSerializer.Deserialize<List<PackageListing>>(response);
+
+                if (packages != null)
+                {
+                    // List all packages
+                    foreach (var package in packages)
+                    {
+                        if (package.full_name.Contains("denikson"))
+                        {
+                            Console.WriteLine($"{package.full_name} - {package.versions[0].version_number}");
+                        }
+                    }
+
+                    var packageFirst = packages.FirstOrDefault(p => p.full_name.StartsWith(BepInExPackageNameWVersion, StringComparison.Ordinal));
+                    if (packageFirst != null)
+                    {
+                        return packageFirst.versions[0].version_number;
+                    }
+                    else
+                    {
+                        Console.WriteLine($"Package {BepInExPackageName} not found.");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error fetching package list from {BaseUrl}{ApiPath}: {ex.Message}");
+            }
+
+            return null;
+        }
+
+        private static async Task<string> DownloadFileAsync(HttpClient httpClient, string downloadUrl)
+        {
+            try
+            {
+                // Add an Accept-Encoding header to request compressed content
+                httpClient.DefaultRequestHeaders.AcceptEncoding.Add(new System.Net.Http.Headers.StringWithQualityHeaderValue("gzip"));
+
+                var response = await httpClient.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead);
+                if (!response.IsSuccessStatusCode)
+                {
+                    Console.WriteLine("Failed to download the file. Status code: " + response.StatusCode);
+                    return null;
+                }
+
+                string tempFilePath = Path.GetTempFileName() + ".zip"; // Add .zip extension to the temp file
+                using (var fs = new FileStream(tempFilePath, FileMode.Create, FileAccess.Write, FileShare.None))
+                {
+                    await response.Content.CopyToAsync(fs);
+                }
+
+                return tempFilePath;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Error downloading file: " + ex.Message);
+            }
+
+            return null;
+        }
+
+        private static void ExtractAndInstall(string zipFilePath, string destinationFolderPath)
+        {
+            try
+            {
+                // Ensure the destination directory exists
+                if (!Directory.Exists(destinationFolderPath))
+                {
+                    Directory.CreateDirectory(destinationFolderPath);
+                }
+
+                Console.WriteLine("Extracting BepInEx to " + destinationFolderPath);
+                // Extract the zip file content to the destination directory and overwrite existing files
+                ZipFile.ExtractToDirectory(zipFilePath, destinationFolderPath);
+
+                Console.WriteLine($"Extracted ZIP file to {destinationFolderPath}");
+
+                // Delete the zip file after extraction if it's no longer needed
+                File.Delete(zipFilePath);
+
+                // Copy all files from BepInExPack_Valheim to the game folder which is the destinationFolderPath
+                string bepInExPackValheimPath = Path.Combine(destinationFolderPath, "BepInExPack_Valheim");
+                if (Directory.Exists(bepInExPackValheimPath))
+                {
+                    foreach (string file in Directory.GetFiles(bepInExPackValheimPath, "*", SearchOption.AllDirectories))
+                    {
+                        string relativePath = file.Substring(bepInExPackValheimPath.Length + 1);
+                        string destinationPath = Path.Combine(destinationFolderPath, relativePath);
+                        Directory.CreateDirectory(Path.GetDirectoryName(destinationPath) ?? throw new InvalidOperationException("Destination path is invalid."));
+                        File.Copy(file, destinationPath, true);
+                    }
+                }
+
+                // Delete the BepInExPack_Valheim folder after copying all files
+                Directory.Delete(bepInExPackValheimPath, true);
+                
+                // Delete the icon.png, CHANGELOG.md, manifest.json and README.md files from the destination folder
+                File.Delete(Path.Combine(destinationFolderPath, "icon.png"));
+                File.Delete(Path.Combine(destinationFolderPath, "CHANGELOG.md"));
+                File.Delete(Path.Combine(destinationFolderPath, "manifest.json"));
+                File.Delete(Path.Combine(destinationFolderPath, "README.md"));
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error extracting ZIP file: {ex.Message}");
+            }
+        }
+
+
+        private static string GetGameFolderPath()
+        {
+            DirectoryInfo managedDirectory = new DirectoryInfo(Environment.CurrentDirectory);
+            string gameFolderPath = managedDirectory.Parent?.Parent?.FullName; // Navigate up to the game folder from Managed
+            Console.WriteLine("Game folder path: " + gameFolderPath);
+            return gameFolderPath ?? throw new InvalidOperationException("Game folder path could not be determined.");
+        }
+
+        public class VersionInfo
+        {
+            public string? name { get; set; }
+            public string? full_name { get; set; }
+            public string? description { get; set; }
+            public string? icon { get; set; }
+            public string? version_number { get; set; }
+            public List<string>? dependencies { get; set; }
+            public string? download_url { get; set; }
+            public int downloads { get; set; }
+            public string? date_created { get; set; }
+            public string? website_url { get; set; }
+            public bool is_active { get; set; }
+            public string? uuid4 { get; set; }
+            public int file_size { get; set; }
+        }
+
+        public class PackageListing
+        {
+            public string? name { get; set; }
+            public string? full_name { get; set; } = string.Empty;
+            public string? owner { get; set; }
+            public string? package_url { get; set; }
+            public string? donation_link { get; set; }
+            public string? date_created { get; set; }
+            public string? date_updated { get; set; }
+            public string? uuid4 { get; set; }
+            public int rating_score { get; set; }
+            public bool is_pinned { get; set; }
+            public bool is_deprecated { get; set; }
+            public bool has_nsfw_content { get; set; }
+            public List<string>? categories { get; set; }
+            public List<VersionInfo>? versions { get; set; }
         }
     }
 }
