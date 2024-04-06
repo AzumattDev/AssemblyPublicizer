@@ -113,9 +113,9 @@ namespace CabbageCrow.AssemblyPublicizer
             {
                 assembly = AssemblyDefinition.ReadAssembly(inputFile);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                Console.WriteLine("ERROR! Cannot read the assembly. Please check your permissions.");
+                Console.WriteLine($"ERROR! Cannot read the assembly. Please check your permissions. Exception: {ex.Message}");
                 return;
             }
 
@@ -132,9 +132,9 @@ namespace CabbageCrow.AssemblyPublicizer
                 assembly.Write(outputFile);
                 Console.WriteLine($"Saved: {outputFile}");
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                Console.WriteLine("ERROR! Cannot create/overwrite the new assembly.");
+                Console.WriteLine($"ERROR! Cannot create/overwrite the new assembly. Exception: {ex.Message}");
             }
         }
 
@@ -142,30 +142,47 @@ namespace CabbageCrow.AssemblyPublicizer
         {
             Console.WriteLine($"Making types, methods, and fields public...");
 
-            int count = types.Count(t => !t.IsPublic && !t.IsNestedPublic);
+            int typeCount = types.Count(t => !t.IsPublic && !t.IsNestedPublic);
             foreach (TypeDefinition? type in types)
             {
-                type.IsPublic = true;
-                type.IsNestedPublic = true;
+                if (!type.IsPublic)
+                {
+                    type.IsPublic = true;
+                    //Console.WriteLine($"Type made public: {type.FullName}");
+                }
+
+                if (type.IsNested && !type.IsNestedPublic)
+                {
+                    type.IsNestedPublic = true;
+                    //Console.WriteLine($"Nested type made public: {type.FullName}");
+                }
             }
 
-            Console.WriteLine($"Changed {count} types to public.");
+            Console.WriteLine($"Changed {typeCount} types to public.");
 
-            count = methods.Count(m => !m.IsPublic);
+            int methodCount = methods.Count(m => !m.IsPublic);
             foreach (MethodDefinition? method in methods)
             {
-                method.IsPublic = true;
+                if (!method.IsPublic)
+                {
+                    method.IsPublic = true;
+                    //Console.WriteLine($"Method made public: {method.FullName}");
+                }
             }
 
-            Console.WriteLine($"Changed {count} methods to public.");
+            Console.WriteLine($"Changed {methodCount} methods to public.");
 
-            count = fields.Count(f => !f.IsPublic);
+            int fieldCount = fields.Count(f => !f.IsPublic);
             foreach (FieldDefinition? field in fields)
             {
-                field.IsPublic = true;
+                if (!field.IsPublic)
+                {
+                    field.IsPublic = true;
+                    //Console.WriteLine($"Field made public: {field.FullName}");
+                }
             }
 
-            Console.WriteLine($"Changed {count} fields to public.");
+            //Console.WriteLine($"Changed {fieldCount} fields to public.");
         }
 
         private static void ShowHelp(OptionSet p)
