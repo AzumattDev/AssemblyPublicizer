@@ -175,7 +175,24 @@ namespace CabbageCrow.AssemblyPublicizer
 
         public static IEnumerable<TypeDefinition> GetAllTypes(ModuleDefinition moduleDefinition)
         {
-            return moduleDefinition.Types.SelectMany(t => t.NestedTypes.Concat(new TypeDefinition[] { t }));
+            return _GetAllNestedTypes(moduleDefinition.Types); //.Reverse();
+        }
+
+        /// <summary>
+        /// Recursive method to get all nested types. Use <see cref="GetAllTypes(ModuleDefinition)"/>
+        /// </summary>
+        /// <param name="typeDefinitions"></param>
+        /// <returns></returns>
+        private static IEnumerable<TypeDefinition> _GetAllNestedTypes(IEnumerable<TypeDefinition> typeDefinitions)
+        {
+            //return typeDefinitions.SelectMany(t => t.NestedTypes);
+
+            if (typeDefinitions?.Count() == 0)
+                return new List<TypeDefinition>();
+
+            var result = typeDefinitions.Concat(_GetAllNestedTypes(typeDefinitions.SelectMany(t => t.NestedTypes)));
+
+            return result;
         }
     }
 }
