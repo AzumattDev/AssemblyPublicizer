@@ -142,21 +142,30 @@ namespace CabbageCrow.AssemblyPublicizer
         {
             Console.WriteLine($"Making types, methods, and fields public...");
 
-            foreach (TypeDefinition type in types)
+            int count = types.Count(t => !t.IsPublic && !t.IsNestedPublic);
+            foreach (TypeDefinition? type in types)
             {
                 type.IsPublic = true;
                 type.IsNestedPublic = true;
             }
 
-            foreach (MethodDefinition method in methods)
+            Console.WriteLine($"Changed {count} types to public.");
+
+            count = methods.Count(m => !m.IsPublic);
+            foreach (MethodDefinition? method in methods)
             {
                 method.IsPublic = true;
             }
 
-            foreach (FieldDefinition field in fields)
+            Console.WriteLine($"Changed {count} methods to public.");
+
+            count = fields.Count(f => !f.IsPublic);
+            foreach (FieldDefinition? field in fields)
             {
                 field.IsPublic = true;
             }
+
+            Console.WriteLine($"Changed {count} fields to public.");
         }
 
         private static void ShowHelp(OptionSet p)
@@ -194,7 +203,7 @@ namespace CabbageCrow.AssemblyPublicizer
 
         private static async Task DownloadAndInstallBepInEx()
         {
-            var httpClient = new HttpClient();
+            HttpClient httpClient = new HttpClient();
             string latestVersion = await GetLatestVersionAsync(httpClient);
             if (latestVersion == null)
             {
@@ -219,14 +228,14 @@ namespace CabbageCrow.AssemblyPublicizer
         {
             try
             {
-                var requestUrl = $"{BaseUrl}{ApiPath}/";
-                var response = await httpClient.GetStringAsync(requestUrl);
-                var packages = JsonSerializer.Deserialize<List<PackageListing>>(response);
+                string requestUrl = $"{BaseUrl}{ApiPath}/";
+                string? response = await httpClient.GetStringAsync(requestUrl);
+                List<PackageListing>? packages = JsonSerializer.Deserialize<List<PackageListing>>(response);
 
                 if (packages != null)
                 {
                     // List all packages
-                    foreach (var package in packages)
+                    foreach (PackageListing? package in packages)
                     {
                         if (package.full_name.Contains("denikson"))
                         {
@@ -234,7 +243,7 @@ namespace CabbageCrow.AssemblyPublicizer
                         }
                     }
 
-                    var packageFirst = packages.FirstOrDefault(p => p.full_name.StartsWith(BepInExPackageNameWVersion, StringComparison.Ordinal));
+                    PackageListing? packageFirst = packages.FirstOrDefault(p => p.full_name.StartsWith(BepInExPackageNameWVersion, StringComparison.Ordinal));
                     if (packageFirst != null)
                     {
                         return packageFirst.versions[0].version_number;
@@ -260,7 +269,7 @@ namespace CabbageCrow.AssemblyPublicizer
                 // Add an Accept-Encoding header to request compressed content
                 httpClient.DefaultRequestHeaders.AcceptEncoding.Add(new System.Net.Http.Headers.StringWithQualityHeaderValue("gzip"));
 
-                var response = await httpClient.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead);
+                HttpResponseMessage? response = await httpClient.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead);
                 if (!response.IsSuccessStatusCode)
                 {
                     Console.WriteLine("Failed to download the file. Status code: " + response.StatusCode);
@@ -268,7 +277,7 @@ namespace CabbageCrow.AssemblyPublicizer
                 }
 
                 string tempFilePath = Path.GetTempFileName() + ".zip"; // Add .zip extension to the temp file
-                using (var fs = new FileStream(tempFilePath, FileMode.Create, FileAccess.Write, FileShare.None))
+                using (FileStream fs = new FileStream(tempFilePath, FileMode.Create, FileAccess.Write, FileShare.None))
                 {
                     await response.Content.CopyToAsync(fs);
                 }
@@ -317,7 +326,7 @@ namespace CabbageCrow.AssemblyPublicizer
 
                 // Delete the BepInExPack_Valheim folder after copying all files
                 Directory.Delete(bepInExPackValheimPath, true);
-                
+
                 // Delete the icon.png, CHANGELOG.md, manifest.json and README.md files from the destination folder
                 File.Delete(Path.Combine(destinationFolderPath, "icon.png"));
                 File.Delete(Path.Combine(destinationFolderPath, "CHANGELOG.md"));
