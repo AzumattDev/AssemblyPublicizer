@@ -239,6 +239,21 @@ namespace CabbageCrow.AssemblyPublicizer
             string gameFolderPath = GetGameFolderPath();
             ExtractAndInstall(zipFilePath, gameFolderPath);
             Console.WriteLine("BepInEx has been successfully installed.");
+            // Publicize the BepInEx assemblies found in BepInEx/core folder and add them to the publicized_assemblies folder
+            string bepInExCorePath = Path.Combine(gameFolderPath, "BepInEx", "core");
+            if (Directory.Exists(bepInExCorePath))
+            {
+                string publicizedAssembliesPath = Path.Combine(gameFolderPath, "BepInEx", "core", "publicized_assemblies");
+                if (!Directory.Exists(publicizedAssembliesPath))
+                {
+                    Directory.CreateDirectory(publicizedAssembliesPath);
+                }
+
+                foreach (string file in Directory.GetFiles(bepInExCorePath, "*.dll"))
+                {
+                    ProcessAssembly(file, publicizedAssembliesPath, "_publicized");
+                }
+            }
         }
 
         private static async Task<string> GetLatestVersionAsync(HttpClient httpClient)
