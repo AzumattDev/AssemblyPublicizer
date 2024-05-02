@@ -122,8 +122,9 @@ namespace CabbageCrow.AssemblyPublicizer
             IEnumerable<TypeDefinition> allTypes = GetAllTypes(assembly.MainModule);
             IEnumerable<MethodDefinition> allMethods = allTypes.SelectMany(t => t.Methods);
             IEnumerable<FieldDefinition> allFields = allTypes.SelectMany(t => t.Fields);
+            IEnumerable<EventDefinition> allEvents = allTypes.SelectMany(t => t.Events);
 
-            MakePublic(allTypes, allMethods, allFields);
+            MakePublic(allTypes, allMethods, allFields, allEvents);
 
             string outputName = $"{Path.GetFileNameWithoutExtension(inputFile)}{suffix}{Path.GetExtension(inputFile)}";
             string outputFile = Path.Combine(outputDir, outputName);
@@ -138,7 +139,7 @@ namespace CabbageCrow.AssemblyPublicizer
             }
         }
 
-        static void MakePublic(IEnumerable<TypeDefinition> types, IEnumerable<MethodDefinition> methods, IEnumerable<FieldDefinition> fields)
+        static void MakePublic(IEnumerable<TypeDefinition> types, IEnumerable<MethodDefinition> methods, IEnumerable<FieldDefinition> fields, IEnumerable<EventDefinition> events)
         {
             Console.WriteLine($"Making types, methods, and fields public...");
 
@@ -172,10 +173,16 @@ namespace CabbageCrow.AssemblyPublicizer
 
             Console.WriteLine($"Changed {methodCount} methods to public.");
 
+            List<string> eventNames = new List<string>();
+            foreach (EventDefinition ev in events)
+            {
+                eventNames.Add(ev.Name);
+            }
+            
             int fieldCount = fields.Count(f => !f.IsPublic);
             foreach (FieldDefinition? field in fields)
             {
-                if (!field.IsPublic)
+                if (!field.IsPublic && !eventNames.Contains(field.Name))
                 {
                     field.IsPublic = true;
                     //Console.WriteLine($"Field made public: {field.FullName}");
