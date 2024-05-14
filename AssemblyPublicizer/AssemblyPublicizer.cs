@@ -258,6 +258,11 @@ namespace CabbageCrow.AssemblyPublicizer
 
                 foreach (string file in Directory.GetFiles(bepInExCorePath, "*.dll"))
                 {
+                    // Limit only to BepInEx.dll to fix issues as well as most aren't needed
+                    if (!file.Contains("BepInEx.dll"))
+                    {
+                        continue;
+                    }
                     ProcessAssembly(file, publicizedAssembliesPath, "_publicized");
                 }
             }
