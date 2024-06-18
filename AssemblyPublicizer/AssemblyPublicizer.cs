@@ -406,7 +406,7 @@ namespace CabbageCrow.AssemblyPublicizer
             public string? website_url { get; set; }
             public bool is_active { get; set; }
             public string? uuid4 { get; set; }
-            public int file_size { get; set; }
+            public float file_size { get; set; }
         }
 
         public class PackageListing
